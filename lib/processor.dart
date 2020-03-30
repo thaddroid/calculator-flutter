@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter_calculator/calculator-key.dart';
 import 'package:flutter_calculator/key-controller.dart';
+import 'package:stack/stack.dart';
 
 import 'key-symbol.dart';
 
@@ -10,6 +12,11 @@ abstract class Processor {
   static String _valA = '0';
   static String _valB = '0';
   static String _result;
+  static int maxDigit = 9;
+  static String _currentValue;
+  static Stack<KeySymbol> _processStack = Stack();
+  static int _size = 0;
+  static bool _shouldCalculateProduct = false;
 
   static StreamController _controller = StreamController();
   static Stream get _stream => _controller.stream;
@@ -20,12 +27,7 @@ abstract class Processor {
 
   static void _fire(String data) => _controller.add(_output);
 
-  static String get _output => _result == null ? _equation : _result;
-
-  static String get _equation =>
-      _valA +
-      (_operator != null ? ' ' + _operator.value : '') +
-      (_valB != '0' ? ' ' + _valB : '');
+  static String get _output => _currentValue == null ? '0' : _currentValue;
 
   static dispose() => _controller.close();
 
@@ -42,13 +44,6 @@ abstract class Processor {
   }
 
   static void handleFunction(CalculatorKey key) {
-    if (_valA == '0') {
-      return;
-    }
-    if (_result != null) {
-      _condense();
-    }
-
     Map<KeySymbol, dynamic> table = {
       Keys.clear: () => _clear(),
       Keys.sign: () => _sign(),
@@ -60,42 +55,127 @@ abstract class Processor {
     refresh();
   }
 
-  static void handleOperator(CalculatorKey key) {
-    if (_valA == '0') {
-      return;
-    }
-    if (key.symbol == Keys.equals) {
-      return _calculate();
-    }
-    if (_result != null) {
-      _condense();
+  static String _newCalculate(
+      KeySymbol valBSymbol, KeySymbol operatorSymbol, KeySymbol valASymbol) {
+    String valA = (valASymbol == null) ? "0" : valASymbol.value;
+    String valB = (valBSymbol == null) ? valA : valBSymbol.value;
+
+    Map<KeySymbol, dynamic> table = {
+      Keys.divide: (a, b) => (a / b),
+      Keys.multiply: (a, b) => (a * b),
+      Keys.subtract: (a, b) => (a - b),
+      Keys.add: (a, b) => (a + b),
+    };
+
+    double result =
+        table[operatorSymbol](double.parse(valA), double.parse(valB));
+    String str = result.toString();
+
+    while ((str.contains('.') && str.endsWith('0')) || str.endsWith('.')) {
+      str = str.substring(0, str.length - 1);
     }
 
-    _operator = key.symbol;
+    return str;
+  }
+
+  static void addToStack(KeySymbol keySymbol) {
+    _size++;
+    _processStack.push(keySymbol);
+  }
+
+  static KeySymbol removeFromStack() {
+    _size--;
+    return _processStack.pop();
+  }
+
+  static void clearStack() {
+    while (_processStack.isNotEmpty) {
+      _processStack.pop();
+    }
+    _size = 0;
+  }
+
+  static void handleOperator(CalculatorKey key) {
+    KeySymbol operator = key.symbol;
+
+    if (_currentValue == null) {
+      if (operator == Keys.equals) {
+        if (_processStack.top().isOperator) {
+          addToStack(KeySymbol(_currentValue));
+        }
+        while (_processStack.isNotEmpty) {
+          _currentValue = _newCalculate(
+              removeFromStack(), removeFromStack(), removeFromStack());
+          if (_processStack.isEmpty) break;
+          addToStack(KeySymbol(_currentValue));
+        }
+        addToStack(KeySymbol(_currentValue));
+        refresh();
+        return;
+      }
+
+      if (_processStack.top().isOperator) {
+        removeFromStack();
+      } else {
+        addToStack(Keys.zero);
+      }
+      addToStack(operator);
+      return;
+    } else {
+      if (_shouldCalculateProduct) {
+        addToStack(KeySymbol(_currentValue));
+        _currentValue = _newCalculate(
+            removeFromStack(), removeFromStack(), removeFromStack());
+        _shouldCalculateProduct = false;
+        refresh();
+      }
+
+      addToStack(KeySymbol(_currentValue));
+      _currentValue = null;
+      _shouldCalculateProduct = false;
+
+      if (operator.isFirstPriorityOperator) {
+        _shouldCalculateProduct = true;
+
+        addToStack(operator);
+        return;
+      }
+    }
+
+    if (_size < 3) {
+      addToStack(operator);
+      return;
+    }
+
+    while (_processStack.isNotEmpty) {
+      _currentValue = _newCalculate(
+          removeFromStack(), removeFromStack(), removeFromStack());
+      if (_processStack.isEmpty) break;
+      addToStack(KeySymbol(_currentValue));
+    }
+    addToStack(KeySymbol(_currentValue));
+    addToStack(operator);
     refresh();
+
+    _currentValue = null;
   }
 
   static void handleInteger(CalculatorKey key) {
     String val = key.symbol.value;
-    if (_operator == null) {
-      _valA = (_valA == '0') ? val : _valA + val;
-    } else {
-      _valB = (_valB == '0') ? val : _valB + val;
-    }
+    _currentValue = (_currentValue == null) ? val : _currentValue + val;
     refresh();
   }
 
   static void _clear() {
-    _valA = _valB = '0';
-    _operator = _result = null;
+    _currentValue = null;
+    _shouldCalculateProduct = false;
+    clearStack();
   }
 
   static void _sign() {
-    if (_valB != '0') {
-      _valB = (_valB.contains('-') ? _valB.substring(1) : '-' + _valB);
-    } else if (_valA != '0') {
-      _valA = (_valA.contains('-') ? _valA.substring(1) : '-' + _valA);
-    }
+    _currentValue = (_currentValue.contains('-')
+        ? _currentValue.substring(1)
+        : '-' + _currentValue);
   }
 
   static String calcPercent(String x) => (double.parse(x) / 100).toString();
@@ -116,9 +196,9 @@ abstract class Processor {
     }
   }
 
-  static void _calculate() {
+  static bool _calculate() {
     if (_operator == null || _valB == '0') {
-      return;
+      return false;
     }
 
     Map<KeySymbol, dynamic> table = {
@@ -137,6 +217,7 @@ abstract class Processor {
 
     _result = str;
     refresh();
+    return true;
   }
 
   static void _condense() {

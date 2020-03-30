@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 
 class Display extends StatelessWidget {
@@ -12,19 +13,20 @@ class Display extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     TextStyle style = Theme.of(context).textTheme.headline2.copyWith(
-        color: Colors.white, fontWeight: FontWeight.w300, fontSize: 55);
+        color: Colors.white, fontWeight: FontWeight.w300, fontSize: 80);
 
     return Container(
       padding: EdgeInsets.only(top: _margin, bottom: _margin),
       constraints: BoxConstraints.expand(height: height),
       child: Container(
-        padding: EdgeInsets.only(left: 32, right: 32),
+        padding: EdgeInsets.only(left: 28, right: 28),
         constraints: BoxConstraints.expand(height: height - (_margin)),
         alignment: Alignment.bottomRight,
-        child: Text(
+        child: AutoSizeText(
           _output,
           style: style,
           maxLines: 1,
+          minFontSize: 60,
           textAlign: TextAlign.right,
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'display.dart';
 import 'key-controller.dart';
@@ -25,6 +26,11 @@ class _CalculatorState extends State<Calculator> {
     super.initState();
   }
 
+  String _formatDisplay(String data) {
+    var f = NumberFormat("#,###.#", "en_US");
+    return f.format(double.parse(data));
+  }
+
   @override
   void dispose() {
     KeyController.dispose();
@@ -37,7 +43,7 @@ class _CalculatorState extends State<Calculator> {
     Size screen = MediaQuery.of(context).size;
 
     double buttonSize = screen.width / 4;
-    double displayHeight = screen.height - (buttonSize * 5) - 115;
+    double displayHeight = screen.height - (buttonSize * 5) - 50;
 
     return Scaffold(
       backgroundColor: Colors.black,

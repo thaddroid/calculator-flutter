@@ -20,10 +20,14 @@ class KeySymbol {
     Keys.add
   ];
 
+  static List<KeySymbol> _firstPriorityOperator = [Keys.divide, Keys.multiply];
+
   @override
   String toString() => value;
 
   bool get isOperator => _operators.contains(this);
+  bool get isFirstPriorityOperator =>
+      isOperator && _firstPriorityOperator.contains(this);
   bool get isFunction => _functions.contains(this);
   bool get isInteger => !isOperator && !isFunction;
 
