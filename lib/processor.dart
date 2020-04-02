@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:flutter_calculator/calculator-key.dart';
 import 'package:flutter_calculator/key-controller.dart';
@@ -7,16 +6,19 @@ import 'package:stack/stack.dart';
 
 import 'key-symbol.dart';
 
+// TODO
+// implement RxDart, Frappe?
+// Handle more than 9 digits
+// Make more like iOS
+
 abstract class Processor {
-  static KeySymbol _operator;
-  static String _valA = '0';
-  static String _valB = '0';
-  static String _result;
   static int maxDigit = 9;
   static String _currentValue;
   static Stack<KeySymbol> _processStack = Stack();
   static int _size = 0;
   static bool _shouldCalculateProduct = false;
+  static KeySymbol _currentOperator;
+  static KeySymbol _currentIncrement;
 
   static StreamController _controller = StreamController();
   static Stream get _stream => _controller.stream;
@@ -52,13 +54,17 @@ abstract class Processor {
     };
 
     table[key.symbol]();
-    refresh();
+    if (key.symbol != Keys.percent) refresh();
   }
 
-  static String _newCalculate(
+  static String _calculate(
       KeySymbol valBSymbol, KeySymbol operatorSymbol, KeySymbol valASymbol) {
-    String valA = (valASymbol == null) ? "0" : valASymbol.value;
-    String valB = (valBSymbol == null) ? valA : valBSymbol.value;
+    String valA = (valASymbol == null || valASymbol.value == null)
+        ? "0"
+        : valASymbol.value;
+    String valB = (valBSymbol == null || valBSymbol.value == null)
+        ? valA
+        : valBSymbol.value;
 
     Map<KeySymbol, dynamic> table = {
       Keys.divide: (a, b) => (a / b),
@@ -78,12 +84,42 @@ abstract class Processor {
     return str;
   }
 
-  static void addToStack(KeySymbol keySymbol) {
+  static String _calculateIncrement(String value) {
+    Map<KeySymbol, dynamic> table = {
+      Keys.divide: (a, b) => (a / b),
+      Keys.multiply: (a, b) => (a * b),
+      Keys.subtract: (a, b) => (a - b),
+      Keys.add: (a, b) => (a + b),
+    };
+
+    double result = table[_currentOperator](
+        double.parse(value), double.parse(_currentIncrement.value));
+    String str = result.toString();
+
+    while ((str.contains('.') && str.endsWith('0')) || str.endsWith('.')) {
+      str = str.substring(0, str.length - 1);
+    }
+
+    return str;
+  }
+
+  static void _sumUp() {
+    while (_processStack.isNotEmpty) {
+      _currentValue =
+          _calculate(popFromStack(), popFromStack(), popFromStack());
+      if (_processStack.isEmpty) break;
+      pushToStack(KeySymbol(_currentValue));
+    }
+  }
+
+  static void pushToStack(KeySymbol keySymbol) {
     _size++;
     _processStack.push(keySymbol);
   }
 
-  static KeySymbol removeFromStack() {
+  static KeySymbol popFromStack() {
+    if (_size == 0) return KeySymbol(null);
+
     _size--;
     return _processStack.pop();
   }
@@ -95,73 +131,121 @@ abstract class Processor {
     _size = 0;
   }
 
+  static void _updateScreen() {
+    refresh();
+    _currentValue = null;
+  }
+
+  static void _equal() {
+    // 1. empty or only have 1 element
+    if (_size <= 1) {
+      _currentValue = popFromStack().value;
+      return;
+    }
+
+    // 2. top element is operator => self operation
+    if (_processStack.top().isOperator) {
+      KeySymbol topOperator = popFromStack();
+      _currentValue = popFromStack().value;
+
+      // if add or subtract
+      if (topOperator == Keys.add || topOperator == Keys.subtract) {
+        if (_currentOperator != topOperator) {
+          _currentOperator = topOperator;
+          _currentIncrement = KeySymbol(_currentValue);
+        }
+
+        _currentValue = _calculateIncrement(_currentValue);
+      } else {
+        // if multiply or divide
+        // 2.1 size <= 2 e.g. 2 x = => 2 x 2 => 4 x 2
+        // 2.2 size > 2 e.g. 1 + 2 x 2 x = => 1 + 4 x 4 => 17 x 4 => 68 x 4
+        if (_size > 2) {
+          _currentValue = _calculate(
+              KeySymbol(_currentValue), popFromStack(), popFromStack());
+        }
+
+        if (_currentOperator != topOperator) {
+          _currentOperator = topOperator;
+          _currentIncrement = KeySymbol(_currentValue);
+        }
+
+        _currentValue = _calculateIncrement(_currentValue);
+
+        if (_processStack.isNotEmpty) {
+          _currentValue = _calculate(
+              KeySymbol(_currentValue), popFromStack(), popFromStack());
+        }
+      }
+
+      pushToStack(KeySymbol(_currentValue));
+      pushToStack(_currentOperator);
+      _updateScreen();
+
+      return;
+    }
+
+    // 3. top element is digit
+    _sumUp();
+    refresh(); //we save the final result in _currentValue so don't need to clear it up
+  }
+
+  static void _multiplyOrDivide(KeySymbol operator) {
+    if (_shouldCalculateProduct) {
+      _currentValue =
+          _calculate(popFromStack(), popFromStack(), popFromStack());
+      pushToStack(KeySymbol(_currentValue));
+      _updateScreen();
+    }
+
+    _shouldCalculateProduct = true;
+    pushToStack(operator);
+  }
+
+  static void _addOrSubtract(KeySymbol operator) {
+    // if having valid equation, we have to calculate it first
+    if (_size >= 3) {
+      _sumUp();
+      pushToStack(KeySymbol(_currentValue));
+      _updateScreen();
+    }
+
+    _shouldCalculateProduct = false;
+    pushToStack(operator);
+  }
+
   static void handleOperator(CalculatorKey key) {
+    if (_currentValue != null) {
+      pushToStack(KeySymbol(_currentValue));
+      _currentValue = null;
+    }
+
     KeySymbol operator = key.symbol;
 
-    if (_currentValue == null) {
-      if (operator == Keys.equals) {
-        if (_processStack.top().isOperator) {
-          addToStack(KeySymbol(_currentValue));
-        }
-        while (_processStack.isNotEmpty) {
-          _currentValue = _newCalculate(
-              removeFromStack(), removeFromStack(), removeFromStack());
-          if (_processStack.isEmpty) break;
-          addToStack(KeySymbol(_currentValue));
-        }
-        addToStack(KeySymbol(_currentValue));
-        refresh();
-        return;
-      }
-
-      if (_processStack.top().isOperator) {
-        removeFromStack();
-      } else {
-        addToStack(Keys.zero);
-      }
-      addToStack(operator);
-      return;
-    } else {
-      if (_shouldCalculateProduct) {
-        addToStack(KeySymbol(_currentValue));
-        _currentValue = _newCalculate(
-            removeFromStack(), removeFromStack(), removeFromStack());
-        _shouldCalculateProduct = false;
-        refresh();
-      }
-
-      addToStack(KeySymbol(_currentValue));
-      _currentValue = null;
-      _shouldCalculateProduct = false;
-
-      if (operator.isFirstPriorityOperator) {
-        _shouldCalculateProduct = true;
-
-        addToStack(operator);
-        return;
-      }
-    }
-
-    if (_size < 3) {
-      addToStack(operator);
+    // if top stack is operator, we just need to replace the operator except equal operation
+    if (_processStack.top().isOperator && operator != Keys.equals) {
+      popFromStack();
+      pushToStack(operator);
       return;
     }
 
-    while (_processStack.isNotEmpty) {
-      _currentValue = _newCalculate(
-          removeFromStack(), removeFromStack(), removeFromStack());
-      if (_processStack.isEmpty) break;
-      addToStack(KeySymbol(_currentValue));
+    switch (operator) {
+      case Keys.equals:
+        _equal();
+        break;
+      case Keys.multiply:
+      case Keys.divide:
+        _multiplyOrDivide(operator);
+        break;
+      default:
+        _addOrSubtract(operator);
+        break;
     }
-    addToStack(KeySymbol(_currentValue));
-    addToStack(operator);
-    refresh();
-
-    _currentValue = null;
   }
 
   static void handleInteger(CalculatorKey key) {
     String val = key.symbol.value;
+
     _currentValue = (_currentValue == null) ? val : _currentValue + val;
     refresh();
   }
@@ -169,6 +253,8 @@ abstract class Processor {
   static void _clear() {
     _currentValue = null;
     _shouldCalculateProduct = false;
+    _currentIncrement = null;
+    _currentOperator = null;
     clearStack();
   }
 
@@ -181,48 +267,17 @@ abstract class Processor {
   static String calcPercent(String x) => (double.parse(x) / 100).toString();
 
   static void _percent() {
-    if (_valB != '0' && !_valB.contains('.')) {
-      _valB = calcPercent(_valB);
-    } else if (_valA != '0' && !_valA.contains('.')) {
-      _valA = calcPercent(_valA);
-    }
+    if (_currentValue == null) return;
+
+    _currentValue = calcPercent(_currentValue);
+    refresh();
   }
 
   static void _decimal() {
-    if (_valB != '0' && !_valB.contains('.')) {
-      _valB = _valB + '.';
-    } else if (_valA != '0' && !_valA.contains('.')) {
-      _valA = _valA + '.';
+    if (_currentValue == null) _currentValue = "0";
+
+    if (!_currentValue.contains('.')) {
+      _currentValue += '.';
     }
-  }
-
-  static bool _calculate() {
-    if (_operator == null || _valB == '0') {
-      return false;
-    }
-
-    Map<KeySymbol, dynamic> table = {
-      Keys.divide: (a, b) => (a / b),
-      Keys.multiply: (a, b) => (a * b),
-      Keys.subtract: (a, b) => (a - b),
-      Keys.add: (a, b) => (a + b),
-    };
-
-    double result = table[_operator](double.parse(_valA), double.parse(_valB));
-    String str = result.toString();
-
-    while ((str.contains('.') && str.endsWith('0')) || str.endsWith('.')) {
-      str = str.substring(0, str.length - 1);
-    }
-
-    _result = str;
-    refresh();
-    return true;
-  }
-
-  static void _condense() {
-    _valA = _result;
-    _valB = '0';
-    _result = _operator = null;
   }
 }

@@ -4,26 +4,26 @@ import 'key-controller.dart';
 import 'key-symbol.dart';
 
 abstract class Keys {
-  static KeySymbol clear = const KeySymbol('AC');
-  static KeySymbol sign = const KeySymbol('±');
-  static KeySymbol percent = const KeySymbol('%');
-  static KeySymbol divide = const KeySymbol('÷');
-  static KeySymbol multiply = const KeySymbol('x');
-  static KeySymbol subtract = const KeySymbol('-');
-  static KeySymbol add = const KeySymbol('+');
-  static KeySymbol equals = const KeySymbol('=');
-  static KeySymbol decimal = const KeySymbol('.');
+  static const KeySymbol clear = const KeySymbol('AC');
+  static const KeySymbol sign = const KeySymbol('±');
+  static const KeySymbol percent = const KeySymbol('%');
+  static const KeySymbol divide = const KeySymbol('÷');
+  static const KeySymbol multiply = const KeySymbol('x');
+  static const KeySymbol subtract = const KeySymbol('-');
+  static const KeySymbol add = const KeySymbol('+');
+  static const KeySymbol equals = const KeySymbol('=');
+  static const KeySymbol decimal = const KeySymbol('.');
 
-  static KeySymbol zero = const KeySymbol('0');
-  static KeySymbol one = const KeySymbol('1');
-  static KeySymbol two = const KeySymbol('2');
-  static KeySymbol three = const KeySymbol('3');
-  static KeySymbol four = const KeySymbol('4');
-  static KeySymbol five = const KeySymbol('5');
-  static KeySymbol six = const KeySymbol('6');
-  static KeySymbol seven = const KeySymbol('7');
-  static KeySymbol eight = const KeySymbol('8');
-  static KeySymbol nine = const KeySymbol('9');
+  static const KeySymbol zero = const KeySymbol('0');
+  static const KeySymbol one = const KeySymbol('1');
+  static const KeySymbol two = const KeySymbol('2');
+  static const KeySymbol three = const KeySymbol('3');
+  static const KeySymbol four = const KeySymbol('4');
+  static const KeySymbol five = const KeySymbol('5');
+  static const KeySymbol six = const KeySymbol('6');
+  static const KeySymbol seven = const KeySymbol('7');
+  static const KeySymbol eight = const KeySymbol('8');
+  static const KeySymbol nine = const KeySymbol('9');
 }
 
 class CalculatorKey extends StatelessWidget {
