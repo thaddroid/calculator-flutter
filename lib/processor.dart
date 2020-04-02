@@ -17,6 +17,7 @@ abstract class Processor {
   static Stack<KeySymbol> _processStack = Stack();
   static int _size = 0;
   static bool _shouldCalculateProduct = false;
+  static bool _haveEqualResult = false;
   static KeySymbol _currentOperator;
   static KeySymbol _currentIncrement;
 
@@ -137,6 +138,8 @@ abstract class Processor {
   }
 
   static void _equal() {
+    _shouldCalculateProduct = false;
+
     // 1. empty or only have 1 element
     if (_size <= 1) {
       _currentValue = popFromStack().value;
@@ -188,6 +191,7 @@ abstract class Processor {
     // 3. top element is digit
     _sumUp();
     refresh(); //we save the final result in _currentValue so don't need to clear it up
+    _haveEqualResult = true;
   }
 
   static void _multiplyOrDivide(KeySymbol operator) {
@@ -220,6 +224,8 @@ abstract class Processor {
       _currentValue = null;
     }
 
+    if (_processStack.isEmpty) return;
+
     KeySymbol operator = key.symbol;
 
     // if top stack is operator, we just need to replace the operator except equal operation
@@ -244,6 +250,11 @@ abstract class Processor {
   }
 
   static void handleInteger(CalculatorKey key) {
+    if (_haveEqualResult) {
+      _currentValue = null;
+      _haveEqualResult = false;
+    }
+
     String val = key.symbol.value;
 
     _currentValue = (_currentValue == null) ? val : _currentValue + val;
